@@ -2,7 +2,14 @@ ccflags-y = -I$(src) -DCONFIG_ANDROID_BINDERFS -DCONFIG_ANDROID_BINDER_DEVICES_H
 obj-m := binder_linux.o
 binder_linux-y := binderfs.o binder.o binder_alloc.o idr.o deps.o
 
-KDIR ?= /lib/modules/`uname -r`/build
+
+ifeq ($(KERNEL_SRC),)
+  ifeq ($(KDIR),)
+    KDIR := /lib/modules/$(shell uname -r)/build
+  endif
+else
+  KDIR := $(KERNEL_SRC)
+endif
 
 all:
 	$(MAKE) -C $(KDIR) M=$$PWD
