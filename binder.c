@@ -74,6 +74,7 @@
 
 #include "binder_internal.h"
 #include "binder_trace.h"
+#include "deps.h"
 
 static HLIST_HEAD(binder_deferred_list);
 static DEFINE_MUTEX(binder_deferred_lock);
