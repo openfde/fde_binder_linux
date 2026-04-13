@@ -19,6 +19,7 @@
 #include <linux/mutex.h>
 #include <linux/mount.h>
 #include <linux/fs_parser.h>
+#include <linux/nsproxy.h>
 #include <linux/sched.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
@@ -45,6 +46,15 @@
 static dev_t binderfs_dev;
 static DEFINE_MUTEX(binderfs_minors_mutex);
 static DEFINE_IDA(binderfs_minors);
+
+#if defined(CONFIG_IPC_NS)
+static struct ipc_namespace *binderfs_initial_ipc_ns;
+
+static inline bool binderfs_is_initial_ipc_ns(const struct ipc_namespace *ipc_ns)
+{
+	return binderfs_initial_ipc_ns && ipc_ns == binderfs_initial_ipc_ns;
+}
+#endif
 
 enum binderfs_param {
 	Opt_max,
@@ -121,7 +131,7 @@ static int binderfs_binder_device_create(struct inode *ref_inode,
 	struct super_block *sb = ref_inode->i_sb;
 	struct binderfs_info *info = sb->s_fs_info;
 #if defined(CONFIG_IPC_NS)
-	bool use_reserve = (info->ipc_ns == &init_ipc_ns);
+	bool use_reserve = binderfs_is_initial_ipc_ns(info->ipc_ns);
 #else
 	bool use_reserve = true;
 #endif
@@ -398,7 +408,7 @@ static int binderfs_binder_ctl_create(struct super_block *sb)
 	struct dentry *root = sb->s_root;
 	struct binderfs_info *info = sb->s_fs_info;
 #if defined(CONFIG_IPC_NS)
-	bool use_reserve = (info->ipc_ns == &init_ipc_ns);
+	bool use_reserve = binderfs_is_initial_ipc_ns(info->ipc_ns);
 #else
 	bool use_reserve = true;
 #endif
@@ -801,6 +811,13 @@ int __init init_binderfs(void)
 	const char *name;
 	size_t len;
 
+#if defined(CONFIG_IPC_NS)
+	if (!current->nsproxy || !current->nsproxy->ipc_ns)
+		return -EINVAL;
+
+	binderfs_initial_ipc_ns = get_ipc_ns(current->nsproxy->ipc_ns);
+#endif
+
 	/* Verify that the default binderfs device names are valid. */
 	name = binder_devices_param;
 	for (len = strcspn(name, ","); len > 0; len = strcspn(name, ",")) {
@@ -820,8 +837,26 @@ int __init init_binderfs(void)
 	ret = register_filesystem(&binder_fs_type);
 	if (ret) {
 		unregister_chrdev_region(binderfs_dev, BINDERFS_MAX_MINOR);
+
+#if defined(CONFIG_IPC_NS)
+		put_ipc_ns(binderfs_initial_ipc_ns);
+		binderfs_initial_ipc_ns = NULL;
+#endif
 		return ret;
 	}
 
 	return ret;
+}
+
+void __exit binderfs_exit(void)
+{
+	unregister_filesystem(&binder_fs_type);
+	unregister_chrdev_region(binderfs_dev, BINDERFS_MAX_MINOR);
+
+#if defined(CONFIG_IPC_NS)
+	if (binderfs_initial_ipc_ns) {
+		put_ipc_ns(binderfs_initial_ipc_ns);
+		binderfs_initial_ipc_ns = NULL;
+	}
+#endif
 }

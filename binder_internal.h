@@ -100,11 +100,14 @@ static inline void binderfs_remove_file(struct dentry *dentry) {}
 
 #ifdef CONFIG_ANDROID_BINDERFS
 extern int __init init_binderfs(void);
+extern void __exit binderfs_exit(void);
 #else
 static inline int __init init_binderfs(void)
 {
 	return 0;
 }
+
+static inline void __exit binderfs_exit(void) {}
 #endif
 
 struct binder_debugfs_entry {

@@ -67,6 +67,7 @@
 #include <linux/task_work.h>
 #include <linux/sizes.h>
 #include <linux/ktime.h>
+#include <linux/kprobes.h>
 
 #include <uapi/linux/android/binder.h>
 
@@ -89,6 +90,11 @@ static DEFINE_SPINLOCK(binder_dead_nodes_lock);
 static struct dentry *binder_debugfs_dir_entry_root;
 static struct dentry *binder_debugfs_dir_entry_proc;
 static atomic_t binder_last_id;
+kallsyms_lookup_name_t kallsyms_lookup_name_func;
+
+static struct kprobe binder_kallsyms_lookup_name_kprobe = {
+	.symbol_name = "kallsyms_lookup_name",
+};
 
 static int proc_show(struct seq_file *m, void *unused);
 DEFINE_SHOW_ATTRIBUTE(proc);
@@ -6553,6 +6559,24 @@ static int __init init_binder_device(const char *name)
 	return ret;
 }
 
+static int __init binder_init_kallsyms_lookup_name(void)
+{
+	int ret;
+
+	if (kallsyms_lookup_name_func)
+		return 0;
+
+	ret = register_kprobe(&binder_kallsyms_lookup_name_kprobe);
+	if (ret < 0)
+		return ret;
+
+	kallsyms_lookup_name_func =
+		(kallsyms_lookup_name_t)binder_kallsyms_lookup_name_kprobe.addr;
+	unregister_kprobe(&binder_kallsyms_lookup_name_kprobe);
+
+	return kallsyms_lookup_name_func ? 0 : -ENOENT;
+}
+
 static int __init binder_init(void)
 {
 	int ret;
@@ -6561,6 +6585,10 @@ static int __init binder_init(void)
 	struct hlist_node *tmp;
 	char *device_names = NULL;
 	const struct binder_debugfs_entry *db_entry;
+
+	ret = binder_init_kallsyms_lookup_name();
+	if (ret)
+		return ret;
 
 	ret = binder_alloc_shrinker_init();
 	if (ret)
@@ -6623,7 +6651,25 @@ err_alloc_device_names_failed:
 	return ret;
 }
 
-device_initcall(binder_init);
+static void __exit binder_exit(void)
+{
+	struct binder_device *device;
+	struct hlist_node *tmp;
+
+	binderfs_exit();
+
+	hlist_for_each_entry_safe(device, tmp, &binder_devices, hlist) {
+		misc_deregister(&device->miscdev);
+		hlist_del(&device->hlist);
+		kfree(device);
+	}
+
+	debugfs_remove_recursive(binder_debugfs_dir_entry_root);
+	binder_alloc_shrinker_exit();
+}
+
+module_init(binder_init);
+module_exit(binder_exit);
 
 #define CREATE_TRACE_POINTS
 #include "binder_trace.h"
