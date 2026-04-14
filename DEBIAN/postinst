@@ -1,4 +1,9 @@
 #!/bin/bash
+uname -r |grep 6.6 1>/dev/null 2>&1
+if [ $? != 0 ];then
+	echo "$(uname -r) is not support. only 6.6 support"
+	exit 0
+fi
 dkms status > /dev/null 2>/dev/null
 if [[ $? == 0 ]];then
 	dkms install -m fde_binder_linux6.6 -v 1.0 --force -k $(uname -r ) && depmod -a
