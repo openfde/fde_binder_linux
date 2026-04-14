@@ -1,0 +1,22 @@
+#!/bin/bash
+dkms status > /dev/null 2>/dev/null
+if [[ $? == 0 ]];then
+	dkms install -m fde_binder_linux6.6 -v 1.0 --force -k $(uname -r ) && depmod -a
+	MODULE="binder_linux"
+	grep -q "^$MODULE$" /etc/modules
+	if [ $? -ne 0 ];then
+		echo $MODULE |sudo tee -a /etc/modules >/dev/null
+	fi
+else
+	echo 'No dkms, Please install dkms first.'
+fi
+if lsmod |grep -wq "binder_linux"; then
+	USAGE_COUNT=$(lsmod |grep -w "binder_linux" |awk '{print $3}')
+	if [ "$USAGE_COUNT" = 0 ];then
+		modprobe -r binder_linux
+		modprobe binder_linux
+	fi
+else
+		modprobe binder_linux
+fi
+exit 0

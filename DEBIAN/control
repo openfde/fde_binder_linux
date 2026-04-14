@@ -1,0 +1,11 @@
+Source: fde-binder-linux6.6-dkms
+Section: utils
+Priority: optional
+Maintainer: OpenFDE 
+Build-Depends: debhelper (>= 7), dkms
+Standards-Version: 3.8.1
+Package: fde-binder-linux6.6-dkms
+Version: 1.0
+Architecture: arm64
+Depends: debconf 
+Description: fde binder_linux  driver in DKMS format.

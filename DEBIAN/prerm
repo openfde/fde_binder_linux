@@ -1,0 +1,12 @@
+#!/bin/bash
+
+dkms status fde_binder_linux6.6 >/dev/null 2>&1
+if [[ $? == 0 ]];then
+	dkms remove -m fde_binder_linux6.6/1.0 --all
+fi
+MODULE=binder_linux
+grep -q "^$MODULE$" /etc/modules
+if [[ $? == 0 ]];then
+	sed -i "/^$MODULE$/d" /etc/modules
+fi
+exit 0
